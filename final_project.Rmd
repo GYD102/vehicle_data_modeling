@@ -1,0 +1,316 @@
+---
+title: "Analysis of Vehicular Insurance Losses and Actuarial Symboling"
+author: "Glib Dolotov, Yunhan Liao, Sarthi Shah, Qianyan Wu"
+date: "12/02/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE, cache = FALSE}
+knitr::read_chunk("final_project.R")
+```
+
+```{r, required-packages, include = FALSE}
+```
+
+```{r, short-summary-function, include = FALSE}
+```
+
+```{r, data-formatting, include = FALSE}
+```
+
+# 1. Introduction
+|       The import, sale, and insurance of automobiles has been a core part of the American economy for decades. Of particular interest to insurance companies are the expenses incured by vehicle owners as a result of mechanical breakdowns, theft, and collision damage. In order to properly price insurance policies, car insurers try to predict these losses based on a variety of other factors. To this end, many vehicle statistics are collected. One such compendium of statistics is the Ward's Automotive Yearbook. From the UCI Machine Learning Repository, we selected a selection of the 1985 Ward's Automotive Yearbook for our analyses. http://archive.ics.uci.edu/ml/datasets/Automobile
+|       The data consists of various attributes of vehicles including weight and dimensions, engine properties, etc. Of particular interest are the symboling and normalized losses variables. The symbol represents a vehicle's "riskiness". It is an ordinal categorical variable for the purposes of our analysis. Normalized losses is the "relative average loss payment per insured vehicle year." We examine how these two factors affect each other and how other factors affect them in this project.
+
+# 2. Analysis
+
+## 2.2 Handling Systematic Tied Values in the Data
+|       A visual examination of the data reveals many ties within the symboling and normalized losses variables. For example, examining rows 174 to 178 reveals the same symbling and normalized loss were assigned to five vehicles considered distinct within the data set. However examination of their characteristics suggests that they are different variants of the same model, with symbol and losses being assigned on a per-model basis. The five Toyota vehicles in rows 174 to 178 have identical dimensions, wheel bases, and (mostly) the same engines. Lines 154 and 155, however, reveal two near identical vehicles with different normalized losses, suggesting that the drive wheels (fwd and 4wd for the two vehicles) are considered different models with regards to the symboling and normalized losses.
+
+```{r, a}
+```
+
+|       Without examining every possible tie individually, we can determine if the per-model assignment holds across the entire data by fitting a multiple linear regression. Consider a statistical model where each configuration of traits that determine a vehicle model correspond to distinct normalized loss statistics. If this model over-fits, we can conclude that normalized loss and symboling are assigned per vehicle model throughout the entire dataset. As it turns out, the model `normalized.losses ~ make : drive.wheels : wheel.base` fits incredibly well. The output below is abridged. Full output is in **Appendix 5.4** which will be split off into a separate file (it is quite long).
+
+```{r, a1}
+```
+
+|       A consequence of the many ties and the same vehicle model being repeated throughout the data is that when we consider wheel-base a categorical variable, the model fits even better.
+
+```{r, a2}
+```
+
+|       These repeated instances of a single normalized loss and symboling assignment means that any analysis of these two variables will be vulnerable to very strong bias. For example, a model with eight variants all sharing the same symbol and loss will have more weight in any analysis than a model which only has two variants. For this reason, we will "collapse" or "deflate" the data by removing redundant rows. The `collapse_model` function source code can be found in **Appendix 5.5**. Unless a variable we are analyzing differs between two variants of the same model, the rows representing the extra variants are removed from the pool.
+
+```{r, collapse-model-function, include = FALSE}
+```
+
+```{r, c}
+```
+
+|       The above output demonstrates the difference between the original `data` and the collapsed `deflated_data` as rows 2 and 5 were removed. The summary tables are available in **Appendix 5.6**.
+
+## 2.3 Comparison of Population Means
+
+### 2.3.0 Variable Selection
+|       To perform a comparison of two population means, several assumptions must be evaluated. The sampling distribution must be approximately normal (this is achievable by a sufficiently large sample size, or by normality testing). Furthermore, since we do not know the variances of our variables a priori, we must evaluate whether or not to pool the variances or consider them unequal. For our first attempt, we tried to test whether or not the population means for normalized losses differed between gas and diesel vehicles. However, as shown in the below output, we did not have enough data normally distributed to meet the necessary testing assumptions.
+
+```{r, d}
+```
+
+|       Next, we considered comparing population means for two-door and four-door vehicles. A visualization via box-plots suggests these populations may have differing means and may have closer-to-normal distributions.
+
+```{r, e, echo=FALSE, warning=FALSE}
+```
+
+|       We deflate the data keeping in mind the `num.of.doors` variable to create the `deflated_data_doors` variable to use in our analysis. This will prevent biased weighing of data towards models with high numbers of variants. Note that this is different from `deflated_data`, which did not consider `num.of.doors` in determining which rows to keep.
+
+```{r, e1}
+```
+
+
+### 2.3.1 Determining Randomness of Missing Values
+
+|       As part of our analysis, we will be evaluating the viability of mean imputation on MCAR and MNAR data. If our data contains one form of missingness, the other will need to be simulated. The variable with missing values that we will be working most with is `normalized.losses`. The boxplot below shows that, within the scope of the entire dataset, `normalized.losses` does not seem to be random. `price` is one variable for which `normalized.losses` would be considered MNAR. This makes sense given the fact that some vehicle models may be entering the American import market for the first time, with no available domestic loss payment data. So while, systematically, it may not be random, it may still be random relative to certain variables.
+
+```{r, h,echo=FALSE, warning=FALSE}
+```
+
+|       Furthermore, a proportion test across the `make` variable indicates that, for that variable, `normalized.losses` should also be considered MNAR: the probability that data is missing is not equal across the different makes. The source for the custom `prop_test_across` function can be found in **Appendix 5.7**.
+
+```{r, prop-test-function, include = FALSE}
+```
+
+```{r, h2}
+```
+
+|       However, for the current analysis, `num.of.doors`, a proportion test shows that we cannot reject the null hypothesis of completely random distribution of missingness across the two populations. Therefore, our data contains MCAR data for this analysis. Later, we will simulate MNAR missingness of `normalized.losses` data across the `num.of.doors` populations.
+
+```{r, i}
+```
+
+### 2.3.2 Performing Two Sample T-Test
+
+|       Using the `full_t_test_doors` function (source for it and it's helper functions can be found in **Appendix 5.8**), we will simultaneously test the normality assumption, equal variance assumption, and if the former is met, conduct a two sample t-test. To demonstrate how deflating the data affects our tests and the consequent statistical inferences, we first perform the t-test on the uncollapsed `data` with all redundant rows present.
+
+```{r, t-test-functions, include = FALSE}
+```
+
+```{r, g}
+```
+
+|       For comparison, here is the output for the two sample t-test on the `deflated_data_doors` variable. Although the conclusion remains the same, the results are strikingly different. The p-values differ by four four orders of magnitude and the standard error (and therefore range of the confidence interval) is significantly larger for the deflated data.
+
+```{r, g2}
+```
+
+### 2.3.3 Performing Two Sample T-Test After Performing Mean Imputation on MCAR Values
+
+|       The previous t-tests dealt with the missing data with a *complete-case analysis* approach: discarding any rows that had missing data in the relevant columns. Another strategy, *mean imputation*, substitutes missing values with the mean for that variable. Below are outputs of t-tests on `data` and `deflated_data_doors` after mean imputation was performed on their `normalized.losses` variables. `mean_impute_normalized_losses` source code in **Appendix 5.9**
+
+```{r, mean-imputation-function, include = FALSE}
+```
+
+```{r, j}
+```
+
+### 2.3.4 Performing Two Sample T-Test After Simulating MNAR Values
+
+|       MCAR and MNAR affect analyses differently and interact differently with imputation methods. We simulated an MNAR scenario by applying the following algorithm: all vehicles in the data with four doors have their `normalized.losses` value replaced with `NA` with a probability of 0.5. This skews the data significantly. A proportion test can be used to confirm that, now, the `normalized.losses` values are MNAR with respect to the `num.of.doors` variable. In this case, the conclusion of the t-test upon this skewed data remains unchanged. This is, however, thanks to the nature of our censoring. Imagine a scenario that censored `normalized.losses` of two door cars with a probability proportional to the `normalized.losses` value. This would simulate the possibility that very damaged cars, due to their expensive nature, have damages that go unreported to insurers. In such a scenario, the mean `normalized.losses` would drop for two door cars, changing significantly the observed mean difference of the two populations.
+
+```{r, mnar-simulation}
+```
+
+|       Another noticeable difference is in the standard error of the two test statistics. This is partly explained by the increased censoring and, therefore, smaller sample sizes. It is unlikely that our simulation affected the standard error, but MNAR scenarios could do this. Censoring being more likely closer a value is to the mean, for example, would increase the sample variance. These scenarios are why, when MNAR data is observed, modeling the missingness with respect to the data is crucial to accurate analysis.
+
+### 2.3.5 Performing Two Sample T-Test After Performing Mean Imputation on MNAR Values
+
+```{r, mnar2}
+```
+
+### 2.3.6 Summarizing Effect of MCAR, MNAR, and Mean Imputation on Two Sample T-Test Outcomes
+
+|       With the exception of reducing sample size, MCAR values have little to no effect on a two sample t-test (or other tests for population mean difference). MNAR, however, may or may not skew the results of mean testing. This implies that the nature of MNAR need be evaluate prior to performing testing on data, even if complete-case analysis is the chosen strategy.
+|       Mean imputation has a very striking effect on the outcomes of testing on population means. This is a logical consequence of the strategy. Although the mean of the missing values might equal the mean of their substitutes, the resulting variance shrinks dramatically. For example, if the missing values are actually 1, 2, 3, 4, and 5 but we substitute in 3, 3, 3, 3, and 3, the mean remains unchanged but our sample variance goes dramatically to 0. The consequence this has on two-sample t-tests, whether data is missing MCAR or MNAR, is that the test is far more likely to reject a hypothesis of equal population means. Effectively, we reduce the power of the test. This is evident from the below summary. Notice how significantly the standard error drops between tests where the only difference in the data was that mean imputation was performed.
+
+
+```{r, comparison}
+```
+
+### 2.3.7 Conclusion
+
+|       Regarding the data, we can conclude that the mean `normalized.losses` differ between the populations of two-door and four-door vehicles, with the mean per-vehicle year losses being higher for two-door vehicles. This result is a reasonable expectation. Two door configurations are more common for convertibles, coupes, and luxury sports vehicles making them more expensive. This increased expense can correlate to increased expense in repair due to a lower supply in replacement parts, more frequent theft or vehicle damage, etc. Buyer beware: purchasing a two-door car means you will likely pay more on insurance than a four-door car.
+
+## 2.4 Testing Impact of Normalized Losses on Symboling via GLM Methods
+
+|       If we wish to model the symboling assignment to vehicles, we must run a logistic regression to generate a GLM since it is a categorical variable. Conveniently, symboling is ordinal, allowing for additional inference on our data and model.
+
+### 2.4.1 Determining Randomness of Missing Values
+
+|       The two factors we initially consider for modeling `symboling` are a vehicle's `normalized.losses` and `price`. As stated previously, many vehicles have missing normalized losses values. Prior to analysis, we must determine whether normalized losses are MCAR or MNAR relative to symboling. Below are the outcomes of two proportion tests. One on the original `data`, and one on `deflated_data`.
+
+```{r, k1}
+```
+
+|       Here is where, for the first time, we see how significantly the row ties skew data. While it did not have an effect on the outcome of the mean comparison test form the previous section, it flips the conclusion of the proportion test that tests for MCAR. For this analysis, we will *not* be using un-deflated data.
+
+### 2.4.2 Model Parameter Selection Via Likelihood Ratio Testing
+
+|       After visually inspecting box-plots for `price` and `normalized.losses` against across the `symboling` groups, we have decided to consider both variables as possible parameters within our GLM. Price appears to move symboling towards the extremes as it increases and normalized losses and symboling appear to be directly proportional to one another. Additionally, although price and normalized losses appear relatively uncorrelated, interaction terms between the two may affect the symboling assignment as well.
+
+```{r, k2.1, echo=FALSE, warning=FALSE}
+```
+
+|       Below, we generate several GLMs with various parameters, including interraction terms. The ones that are removed from consideration on account of coefficient p-values can be found in **Appendix 5.10**. Likelihood ratio testing and comparison of AIC values suggests that the best model is `symboling ~ normalized.losses + price`.
+
+```{r, k2.2}
+```
+
+### 2.4.3 Generating and Evaluating GLM with MCAR Data
+
+|       As part of variable selection, a model was already generated. Below, we tally whether or not the model accurately predicts which symboling should be assigned to each vehicle. This model, which is built upon a complete-case analysis of MCAR data, accurately predicts 29 out of 96 symbols from 96 - 26 = 70 guesses. An accuracy of 29 / 70 = 41%. The code used to evaluate predicted values of the GLMs can be found in **Appendix 5.11**.
+
+```{r, k3, include = FALSE}
+```
+
+```{r, k3.2}
+```
+
+```{r, k3.3, echo = FALSE}
+```
+
+### 2.4.4 Generating and Evaluating GLM with Mean Imputed MCAR Data
+
+|       Next, we apply mean imputation to fill in the missing `normalized.losses` and re-regress our model. Same as with the previous model, we can evaluate it's performance by counting how many symbols it accurately predicts. This model was able to predict 33 out of 96 symbols. While it is tempting to say the model is "more accurate", the increase in successful guesses by 4 is mostly explained by this: the previous model made NO guess as to a vehicle's symboling when it's normalized loss was missing. The previous model made no guess for 26 values, effectively only making 70 guesses. This model makes no guess for only 3 rows, for a total of 93 guesses. The accuracy for this model is 33 / 93 = 35%. A slight decrease in accuracy. There are six possible guesses on symboling that the model can make. It made an additional 23 guesses. If the model guessed completely randomly for these additional 23 guesses, we would expect and additional 4 successful guesses, the exact difference between the number of successful guesses of the previous model and this one.
+|       Another point of note is that the coefficients of this new model can no longer be assumed statistically significant. The p-value of the `price` coefficient slips to 0.06 > 0.05. This is another risk of utilizing mean imputation. A parameter selection process which was sound on un-imputed data may no longer be sound once mean imputation is conducted.
+
+```{r, k4.1}
+```
+
+```{r, k4.2, include = FALSE}
+```
+
+```{r, k4.3}
+```
+
+```{r, k4.4, echo = FALSE}
+```
+
+### 2.4.5 Generating and Evaluating GLM with Simulated MNAR Data
+
+|       We applied a similar method to that applied in our population mean analysis to create MNAR data: `normalized.losses` data is probabilistically censored at different rates for each level of `symboling`. A proportion test confirms that we have successfully created an MNAR scenario.
+
+```{r, k5}
+```
+
+|       The GLM generated on this data is, interestingly, far MORE accurate (26 correct out of 53 guesses on 96 rows).
+
+```{r, k5.2}
+```
+
+```{r, k5.3, include = FALSE}
+```
+
+```{r, k5.4}
+```
+
+```{r, k5.5, echo = FALSE}
+```
+
+### 2.4.6 Generating and Evaluating GLM with Mean Imputed Simulated MNAR Data
+
+|       However, once we use mean imputation, we see once again a significant drop in accuracy. Additionally, the `price` coefficient can no longer be assumed statistically significant, possibly necessitating a redo of parameter selection for this model.
+
+```{r, k6}
+```
+
+```{r, k6.2, include = FALSE}
+```
+
+```{r, k6.3}
+```
+
+```{r, k6.4, echo = FALSE}
+```
+
+### 2.4.7 Summarizing Effect of MCAR, MNAR, and Mean Imputation on Ordinal GLM Regression
+
+|       Mean imputation reduces the accuracy of regressed GLMs. It naively assigns the mean whether or not it is appropriate according to the symboling. *Regression based deterministic imputation* would be a better strategy. Additionally, mean imputation hampers our ability to well select variables for our model.
+
+```{r, k7}
+```
+
+### 2.4.8 Conclusion
+
+|       We conclude that a vehicle's price and normalized losses likely contribute to which symboling it is assigned.
+
+# 3. Comments
+
+|       Our analyses are limited in several regards. Firstly, when evaluating for our GLM, we considered the missingness of one independent variable with respect to our dependent variable, *ignoring the possibility of the other independent variable influencing it's missingness*. When evaluating missingness, it needs to be done across all the variables that are being considered. An additional limitation was is our evaluation of GLMs. Since we are working with an ordinal categorical variable, a deviance can be measured, a "residual" of sorts. This would give a good estimate of each model's accuracy and precision. Additional limitations stem from a lack of information. With limited information, it is difficult to evaluate goodness-of-fit on data that wasn't used to regress the model, despite this being desirable when conducting data analysis.
+|       Another limitation of this analysis is in it's practical application. Our second analysis aimed to predict what symboling was assigned by actuaries to vehicles. What factors do they consider when assigning a symbol to a vehicle model? However, a more practical analysis would evaluate how well the symboling predicts the normalized losses. 
+
+# 4. Acknowledgements
+
+**Special thanks to Professor Pei-Fen Kuan and Ziji Zhang for their guiding advice and teaching.**
+
+\newpage
+# 5. Appendix
+
+## 5.1: Required Packages
+```{r, required-packages, eval = FALSE}
+```
+
+## 5.2: Short Summary Function
+```{r, short-summary-function, eval = FALSE}
+```
+
+## 5.3: Data Formatting Code
+```{r, data-formatting, eval = FALSE}
+```
+
+\newpage
+## 5.4
+```{r, appendix5.4}
+```
+\newpage
+
+## 5.5: Deflation / Collapse Function Code
+```{r, collapse-model-function, eval = FALSE}
+```
+
+## 5.6
+```{r, appendix5.6}
+```
+
+## 5.7: Custom Proportion Test Code
+```{r, prop-test-function, eval = FALSE}
+```
+
+## 5.8: Custom T-Test Code
+```{r, t-test-functions, eval = FALSE}
+```
+
+## 5.9: Mean Imputation Function Code
+```{r, mean-imputation-function, eval = FALSE}
+```
+
+## 5.10: Other GLMs Removed From Consideration
+```{r, appendix5.10}
+```
+
+## 5.11: Fitting the GLMs
+```{r, k3, eval = FALSE}
+```
+
+```{r, k4.2, eval = FALSE}
+```
+
+```{r, k5.3, eval = FALSE}
+```
+
+```{r, k6.2, eval = FALSE}
+```
