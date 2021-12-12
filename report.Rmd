@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r, include = FALSE, cache = FALSE}
-knitr::read_chunk("final_project.R")
+knitr::read_chunk("imports_analysis.R")
 ```
 
 ```{r, required-packages, include = FALSE}
